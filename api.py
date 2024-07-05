@@ -1,8 +1,10 @@
 from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 import subprocess
 import os
 import logging
+import zipfile
+from io import BytesIO
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -79,11 +81,22 @@ async def run_whisperx(
 
     if output_format == "all":
         output_files = [os.path.join(output_dir, f) for f in output_files if f.startswith(audio_filename_without_extension)]
-        return {"files": output_files}
-
+        
+        # Create a ZIP file
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for file_path in output_files:
+                file_name = os.path.basename(file_path)
+                zip_file.write(file_path, arcname=file_name)
+        
+        zip_buffer.seek(0)
+        
+        return StreamingResponse(zip_buffer, media_type="application/zip", headers={"Content-Disposition": f"attachment; filename={audio_filename_without_extension}_output.zip"})
+    
     possible_file = os.path.join(output_dir, f"{audio_filename_without_extension}.{output_format}")
     if os.path.exists(possible_file):
         return FileResponse(possible_file)
     else:
         logger.error(f"Output file not found: {possible_file}")
         return JSONResponse(status_code=404, content={"detail": "Output file not found."})
+
