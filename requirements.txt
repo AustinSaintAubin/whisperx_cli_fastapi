@@ -1,0 +1,10 @@
+# # FastAPI and Uvicorn for the web service
+# fastapi==0.95.2
+# uvicorn==0.22.0
+# python-multipart==0.0.5
+# # uvicorn[standard]==0.15.0
+
+fastapi
+uvicorn
+pydantic
+git+https://github.com/m-bain/whisperx.git
