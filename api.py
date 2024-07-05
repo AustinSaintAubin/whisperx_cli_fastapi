@@ -1,56 +1,78 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 import subprocess
 import os
 import logging
 import zipfile
 from io import BytesIO
+from typing import Union
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+app = FastAPI(title="WhisperX CLI ASR Webservice")
 
 def str_to_bool(value):
     return value.lower() in ['true', '1', 't', 'y', 'yes']
 
-@app.post("/run-whisperx/")
+# Manually define available models, language choices, and other options
+MODEL_CHOICES = ["tiny", "base", "small", "medium", "large", "large-v1", "large-v2", "large-v3"]
+LANGUAGES = {
+    "en": "English",
+    "fr": "French",
+    # Add other language codes and names here
+}
+LANGUAGE_CODES = sorted(LANGUAGES.keys()) + sorted([k.title() for k in LANGUAGES.values()])
+COMPUTE_TYPE_CHOICES = ["float16", "float32", "int8"]
+OUTPUT_FORMAT_CHOICES = ["all", "srt", "vtt", "txt", "tsv", "json", "aud", "dir"]
+TASK_CHOICES = ["transcribe", "translate"]
+
+@app.post("/whisperx/")
 async def run_whisperx(
     audio: UploadFile = File(...),
-    model: str = "base",
-    output_format: str = "txt",
-    task: str = "transcribe",
-    language: str = "en",
-    batch_size: int = 6,
+    model: Union[str, None] = Query(default="base", enum=MODEL_CHOICES),
+    output_format: Union[str, None] = Query(default="txt", enum=OUTPUT_FORMAT_CHOICES),
+    task: Union[str, None] = Query(default="transcribe", enum=TASK_CHOICES),
+    language: Union[str, None] = Query(default=None, enum=LANGUAGE_CODES),
+    batch_size: int = Query(default=6),
 ):
     audio_file_path = f"/tmp/{audio.filename}"
     with open(audio_file_path, "wb") as buffer:
         buffer.write(await audio.read())
 
+    # Retrieve environment variables, default to None if not set
     output_dir = os.getenv("OUTPUT_DIR", "/tmp/output")
     hf_token = os.getenv("HF_TOKEN", "")
-    device = os.getenv("DEVICE", "cuda")
-    device_index = os.getenv("DEVICE_INDEX", "0")
-    compute_type = os.getenv("COMPUTE_TYPE", "float32")
-    threads = os.getenv("THREADS", "4")
+    device = os.getenv("DEVICE", "")
+    device_index = os.getenv("DEVICE_INDEX", "")
+    compute_type = os.getenv("COMPUTE_TYPE", "")
+    threads = os.getenv("THREADS", "")
     print_progress = str_to_bool(os.getenv("PRINT_PROGRESS", "false"))
 
-    command = [
-        "whisperx",
-        audio_file_path,
-        "--model", model,
-        "--output_dir", output_dir,
-        "--output_format", output_format,
-        "--task", task,
-        "--language", language,
-        "--batch_size", str(batch_size),
-        "--device", device,
-        "--device_index", device_index,
-        "--compute_type", compute_type,
-        "--threads", threads,
-    ]
+    command = ["whisperx", audio_file_path]
 
+    # Add optional parameters to the command if they are provided
+    if model:
+        command.extend(["--model", model])
+    if output_dir:
+        command.extend(["--output_dir", output_dir])
+    if output_format:
+        command.extend(["--output_format", output_format])
+    if task:
+        command.extend(["--task", task])
+    if language:
+        command.extend(["--language", language])
+    if batch_size:
+        command.extend(["--batch_size", str(batch_size)])
+    if device:
+        command.extend(["--device", device])
+    if device_index:
+        command.extend(["--device_index", device_index])
+    if compute_type:
+        command.extend(["--compute_type", compute_type])
+    if threads:
+        command.extend(["--threads", threads])
     if hf_token:
         command.extend(["--hf_token", hf_token])
     if print_progress:
