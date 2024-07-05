@@ -54,6 +54,8 @@ async def run_whisperx(
     if print_progress:
         command.append("--print_progress")
 
+    logger.info(f"Running command: {' '.join(command)}")
+
     # Execute the WhisperX command and log the output
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
@@ -69,13 +71,19 @@ async def run_whisperx(
         logger.error(error_message)
         return JSONResponse(status_code=500, content={"detail": error_message})
 
+    logger.info(f"Checking output directory: {output_dir}")
+    output_files = os.listdir(output_dir)
+    logger.info(f"Files in output directory: {output_files}")
+
+    audio_filename_without_extension = os.path.splitext(audio.filename)[0]
+
     if output_format == "all":
-        output_files = [os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.startswith(audio.filename)]
+        output_files = [os.path.join(output_dir, f) for f in output_files if f.startswith(audio_filename_without_extension)]
         return {"files": output_files}
 
-    output_file = os.path.join(output_dir, f"{audio.filename}.{output_format}")
-    if os.path.exists(output_file):
-        return FileResponse(output_file)
+    possible_file = os.path.join(output_dir, f"{audio_filename_without_extension}.{output_format}")
+    if os.path.exists(possible_file):
+        return FileResponse(possible_file)
     else:
+        logger.error(f"Output file not found: {possible_file}")
         return JSONResponse(status_code=404, content={"detail": "Output file not found."})
-
