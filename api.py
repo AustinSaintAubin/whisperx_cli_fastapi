@@ -1,5 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, Query
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, RedirectResponse
 import torch
 import subprocess
 import os
@@ -13,6 +13,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="WhisperX CLI ASR Webservice")
+
+app = FastAPI(
+    title="WhisperX CLI ASR Webservice",
+    description="A webservice for WhisperX CLI",
+    version="0.0.1",
+    contact={
+        "name": "Austin Saint Aubin", 
+        "url": "https://github.com/austinsaintaubin"
+    },
+    license_info={
+        "name": "BSD 4-Clause License",
+        "url": "https://opensource.org/licenses/BSD-4-Clause"
+    }
+)
 
 def str_to_bool(value):
     return value.lower() in ['true', '1', 't', 'y', 'yes']
@@ -43,9 +57,23 @@ COMPUTE_TYPE_CHOICES = ["float16", "float32", "int8"]
 OUTPUT_FORMAT_CHOICES = ["all", "srt", "vtt", "txt", "tsv", "json", "aud", "dir"]
 TASK_CHOICES = ["transcribe", "translate"]
 
+@app.get("/", response_class=RedirectResponse, include_in_schema=False)
+async def index():
+    return "/docs"
+
+# @app.post("/asr/")
+# async def run_whisperx(
+#     audio_file: UploadFile = File(...),
+#     task: Union[str, None] = Query(default="transcribe", enum=TASK_CHOICES),
+#     language: Union[str, None] = Query(default=None, enum=LANGUAGE_CODES),
+#     initial_prompt: Union[str, None] = Query(default=None),
+#     output: Union[str, None] = Query(default="txt", enum=OUTPUT_FORMAT_CHOICES),
+#     output_format = output
+# ):
+
 @app.post("/whisperx/")
 async def run_whisperx(
-    audio: UploadFile = File(...),
+    audio_file: UploadFile = File(...),
     model: Union[str, None] = Query(default="base", enum=MODEL_CHOICES),
     initial_prompt: Union[str, None] = Query(default=None),
     output_format: Union[str, None] = Query(default="txt", enum=OUTPUT_FORMAT_CHOICES),
@@ -58,26 +86,28 @@ async def run_whisperx(
     # hf_token: Union[str, None] = Query(default=None)
     hf_token: Union[str, None] = Query(default="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")
 ):
-    audio_file_path = f"/tmp/{audio.filename}"
+    # Download the audio file to a temporary directory
+    audio_file_path = f"/tmp/{audio_file.filename}"
     with open(audio_file_path, "wb") as buffer:
-        buffer.write(await audio.read())
+        buffer.write(await audio_file.read())
 
     # Retrieve environment variables, default values are provided in comments
     output_dir = os.getenv("OUTPUT_DIR", "/tmp/output")  # Default: "/tmp/output"
     model_dir = os.getenv("MODEL_DIR", "/models")  # Default: "/models"
-
-    device = os.getenv("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")  # Default: "cuda"
-    device_index = os.getenv("DEVICE_INDEX")  # Default: "0"
-    batch_size = os.getenv("BATCH_SIZE", "6")  # Default: "6"
+    
     compute_type = os.getenv("COMPUTE_TYPE", "float16" if torch.cuda.is_available() else "int8")  # Default: "float32"
-    threads = os.getenv("THREADS")  # Default: "4"
+    device = os.getenv("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")  # Default: "cuda"
+
+    device_index = os.getenv("DEVICE_INDEX")  # Default: "0"
     print_progress = str_to_bool(os.getenv("PRINT_PROGRESS", "false"))  # Default: False
+    batch_size = os.getenv("BATCH_SIZE")  # Default: "6"
+    threads = os.getenv("THREADS")  # Default: "4"
     align_model = os.getenv("ALIGN_MODEL")  # Default: ""
     interpolate_method = os.getenv("INTERPOLATE_METHOD")  # Default: "nearest"
     return_char_alignments = str_to_bool(os.getenv("RETURN_CHAR_ALIGNMENTS", "false"))  # Default: False
     vad_onset = os.getenv("VAD_ONSET")  # Default: "0.5"
     vad_offset = os.getenv("VAD_OFFSET")  # Default: "0.363"
-    chunk_size = os.getenv("CHUNK_SIZE", "8")  # Default: "30"
+    chunk_size = os.getenv("CHUNK_SIZE")  # Default: "30"
     temperature = os.getenv("TEMPERATURE")  # Default: "0"
     best_of = os.getenv("BEST_OF")  # Default: "5"
     beam_size = os.getenv("BEAM_SIZE")  # Default: "5"
@@ -177,9 +207,10 @@ async def run_whisperx(
     if segment_resolution:
         command.extend(["--segment_resolution", segment_resolution])
     if print_progress:
-        command.append("--print_progress")
+        command.extend(["--print_progress", "True"])
 
     logger.info(f"Running command: {' '.join(command)}")
+    logger.info(f"NOTE: If command seems to hand, models are likely being downloaded. Please wait.")
 
     # Execute the WhisperX command and log the output
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -203,7 +234,7 @@ async def run_whisperx(
     output_files = os.listdir(output_dir)
     logger.info(f"Files in output directory: {output_files}")
 
-    audio_filename_without_extension = os.path.splitext(audio.filename)[0]
+    audio_filename_without_extension = os.path.splitext(audio_file.filename)[0]
 
     if output_format == "all":
         output_files = [os.path.join(output_dir, f) for f in output_files if f.startswith(audio_filename_without_extension)]
