@@ -6,7 +6,7 @@ import os
 import logging
 import zipfile
 from io import BytesIO
-from typing import Union, Optional
+from typing import Union
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -47,15 +47,16 @@ TASK_CHOICES = ["transcribe", "translate"]
 async def run_whisperx(
     audio: UploadFile = File(...),
     model: Union[str, None] = Query(default="base", enum=MODEL_CHOICES),
-    initial_prompt: Optional[str] = Query(default=None),
+    initial_prompt: Union[str, None] = Query(default=None),
     output_format: Union[str, None] = Query(default="txt", enum=OUTPUT_FORMAT_CHOICES),
     task: Union[str, None] = Query(default="transcribe", enum=TASK_CHOICES),
     language: Union[str, None] = Query(default=None, enum=LANGUAGE_CODES),
     no_align: bool = Query(default=False),
     diarize: bool = Query(default=False),
-    min_speakers: Optional[int] = Query(default=None),
-    max_speakers: Optional[int] = Query(default=None),
-    hf_token: Optional[str] = Query(default=None)
+    min_speakers: Union[str, None] = Query(default=None),
+    max_speakers: Union[str, None] = Query(default=None),
+    # hf_token: Union[str, None] = Query(default=None)
+    hf_token: Union[str, None] = Query(default="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")
 ):
     audio_file_path = f"/tmp/{audio.filename}"
     with open(audio_file_path, "wb") as buffer:
@@ -65,7 +66,7 @@ async def run_whisperx(
     output_dir = os.getenv("OUTPUT_DIR", "/tmp/output")  # Default: "/tmp/output"
     device = os.getenv("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")  # Default: "cuda"
     device_index = os.getenv("DEVICE_INDEX")  # Default: "0"
-    batch_size = os.getenv("BATCH_SIZE")  # Default: "6"
+    batch_size = os.getenv("BATCH_SIZE", "6")  # Default: "6"
     compute_type = os.getenv("COMPUTE_TYPE", "float16" if torch.cuda.is_available() else "int8")  # Default: "float32"
     threads = os.getenv("THREADS")  # Default: "4"
     print_progress = str_to_bool(os.getenv("PRINT_PROGRESS", "false"))  # Default: False
@@ -74,7 +75,7 @@ async def run_whisperx(
     return_char_alignments = str_to_bool(os.getenv("RETURN_CHAR_ALIGNMENTS", "false"))  # Default: False
     vad_onset = os.getenv("VAD_ONSET")  # Default: "0.5"
     vad_offset = os.getenv("VAD_OFFSET")  # Default: "0.363"
-    chunk_size = os.getenv("CHUNK_SIZE")  # Default: "30"
+    chunk_size = os.getenv("CHUNK_SIZE", "8")  # Default: "30"
     temperature = os.getenv("TEMPERATURE")  # Default: "0"
     best_of = os.getenv("BEST_OF")  # Default: "5"
     beam_size = os.getenv("BEAM_SIZE")  # Default: "5"
@@ -93,7 +94,8 @@ async def run_whisperx(
     highlight_words = str_to_bool(os.getenv("HIGHLIGHT_WORDS", "false"))  # Default: False
     segment_resolution = os.getenv("SEGMENT_RESOLUTION")  # Default: "sentence"
 
-    command = ["whisperx", audio_file_path]
+    command = ["whisperx", audio_file_path, "--model_dir", "/models"]
+    # command = ["whisperx", audio_file_path]
 
     # Add optional parameters to the command if they are provided
     if model:
