@@ -1,11 +1,12 @@
 from fastapi import FastAPI, File, UploadFile, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+import torch
 import subprocess
 import os
 import logging
 import zipfile
 from io import BytesIO
-from typing import Union
+from typing import Union, Optional
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -19,9 +20,23 @@ def str_to_bool(value):
 # Manually define available models, language choices, and other options
 MODEL_CHOICES = ["tiny", "base", "small", "medium", "large", "large-v1", "large-v2", "large-v3"]
 LANGUAGES = {
-    "en": "English",
-    "fr": "French",
-    # Add other language codes and names here
+    "af": "Afrikaans", "am": "Amharic", "ar": "Arabic", "as": "Assamese", "az": "Azerbaijani",
+    "ba": "Bashkir", "be": "Belarusian", "bg": "Bulgarian", "bn": "Bengali", "bo": "Tibetan",
+    "br": "Breton", "bs": "Bosnian", "ca": "Catalan", "cs": "Czech", "cy": "Welsh", "da": "Danish",
+    "de": "German", "el": "Greek", "en": "English", "es": "Spanish", "et": "Estonian", "eu": "Basque",
+    "fa": "Persian", "fi": "Finnish", "fo": "Faroese", "fr": "French", "gl": "Galician", "gu": "Gujarati",
+    "ha": "Hausa", "haw": "Hawaiian", "he": "Hebrew", "hi": "Hindi", "hr": "Croatian", "ht": "Haitian Creole",
+    "hu": "Hungarian", "hy": "Armenian", "id": "Indonesian", "is": "Icelandic", "it": "Italian", "ja": "Japanese",
+    "jw": "Javanese", "ka": "Georgian", "kk": "Kazakh", "km": "Khmer", "kn": "Kannada", "ko": "Korean",
+    "la": "Latin", "lb": "Luxembourgish", "ln": "Lingala", "lo": "Lao", "lt": "Lithuanian", "lv": "Latvian",
+    "mg": "Malagasy", "mi": "Maori", "mk": "Macedonian", "ml": "Malayalam", "mn": "Mongolian", "mr": "Marathi",
+    "ms": "Malay", "mt": "Maltese", "my": "Burmese", "ne": "Nepali", "nl": "Dutch", "nn": "Nynorsk",
+    "no": "Norwegian", "oc": "Occitan", "pa": "Panjabi", "pl": "Polish", "ps": "Pashto", "pt": "Portuguese",
+    "ro": "Romanian", "ru": "Russian", "sa": "Sanskrit", "sd": "Sindhi", "si": "Sinhala", "sk": "Slovak",
+    "sl": "Slovenian", "sn": "Shona", "so": "Somali", "sq": "Albanian", "sr": "Serbian", "su": "Sundanese",
+    "sv": "Swedish", "sw": "Swahili", "ta": "Tamil", "te": "Telugu", "tg": "Tajik", "th": "Thai", "tk": "Turkmen",
+    "tl": "Tagalog", "tr": "Turkish", "tt": "Tatar", "uk": "Ukrainian", "ur": "Urdu", "uz": "Uzbek",
+    "vi": "Vietnamese", "yi": "Yiddish", "yo": "Yoruba", "yue": "Cantonese", "zh": "Chinese"
 }
 LANGUAGE_CODES = sorted(LANGUAGES.keys()) + sorted([k.title() for k in LANGUAGES.values()])
 COMPUTE_TYPE_CHOICES = ["float16", "float32", "int8"]
@@ -32,29 +47,59 @@ TASK_CHOICES = ["transcribe", "translate"]
 async def run_whisperx(
     audio: UploadFile = File(...),
     model: Union[str, None] = Query(default="base", enum=MODEL_CHOICES),
+    initial_prompt: Optional[str] = Query(default=None),
     output_format: Union[str, None] = Query(default="txt", enum=OUTPUT_FORMAT_CHOICES),
     task: Union[str, None] = Query(default="transcribe", enum=TASK_CHOICES),
     language: Union[str, None] = Query(default=None, enum=LANGUAGE_CODES),
-    batch_size: int = Query(default=6),
+    no_align: bool = Query(default=False),
+    diarize: bool = Query(default=False),
+    min_speakers: Optional[int] = Query(default=None),
+    max_speakers: Optional[int] = Query(default=None),
+    hf_token: Optional[str] = Query(default=None)
 ):
     audio_file_path = f"/tmp/{audio.filename}"
     with open(audio_file_path, "wb") as buffer:
         buffer.write(await audio.read())
 
-    # Retrieve environment variables, default to None if not set
-    output_dir = os.getenv("OUTPUT_DIR", "/tmp/output")
-    hf_token = os.getenv("HF_TOKEN", "")
-    device = os.getenv("DEVICE", "")
-    device_index = os.getenv("DEVICE_INDEX", "")
-    compute_type = os.getenv("COMPUTE_TYPE", "")
-    threads = os.getenv("THREADS", "")
-    print_progress = str_to_bool(os.getenv("PRINT_PROGRESS", "false"))
+    # Retrieve environment variables, default values are provided in comments
+    output_dir = os.getenv("OUTPUT_DIR", "/tmp/output")  # Default: "/tmp/output"
+    device = os.getenv("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")  # Default: "cuda"
+    device_index = os.getenv("DEVICE_INDEX")  # Default: "0"
+    batch_size = os.getenv("BATCH_SIZE")  # Default: "6"
+    compute_type = os.getenv("COMPUTE_TYPE", "float16" if torch.cuda.is_available() else "int8")  # Default: "float32"
+    threads = os.getenv("THREADS")  # Default: "4"
+    print_progress = str_to_bool(os.getenv("PRINT_PROGRESS", "false"))  # Default: False
+    align_model = os.getenv("ALIGN_MODEL")  # Default: ""
+    interpolate_method = os.getenv("INTERPOLATE_METHOD")  # Default: "nearest"
+    return_char_alignments = str_to_bool(os.getenv("RETURN_CHAR_ALIGNMENTS", "false"))  # Default: False
+    vad_onset = os.getenv("VAD_ONSET")  # Default: "0.5"
+    vad_offset = os.getenv("VAD_OFFSET")  # Default: "0.363"
+    chunk_size = os.getenv("CHUNK_SIZE")  # Default: "30"
+    temperature = os.getenv("TEMPERATURE")  # Default: "0"
+    best_of = os.getenv("BEST_OF")  # Default: "5"
+    beam_size = os.getenv("BEAM_SIZE")  # Default: "5"
+    patience = os.getenv("PATIENCE")  # Default: "1.0"
+    length_penalty = os.getenv("LENGTH_PENALTY")  # Default: "1.0"
+    suppress_tokens = os.getenv("SUPPRESS_TOKENS")  # Default: "-1"
+    suppress_numerals = str_to_bool(os.getenv("SUPPRESS_NUMERALS", "false"))  # Default: False
+    condition_on_previous_text = str_to_bool(os.getenv("CONDITION_ON_PREVIOUS_TEXT", "false"))  # Default: False
+    fp16 = str_to_bool(os.getenv("FP16", "false"))  # Default: Flase
+    temperature_increment_on_fallback = os.getenv("TEMPERATURE_INCREMENT_ON_FALLBACK")  # Default: "0.2"
+    compression_ratio_threshold = os.getenv("COMPRESSION_RATIO_THRESHOLD")  # Default: "2.4"
+    logprob_threshold = os.getenv("LOGPROB_THRESHOLD")  # Default: "-1.0"
+    no_speech_threshold = os.getenv("NO_SPEECH_THRESHOLD")  # Default: "0.6"
+    max_line_width = os.getenv("MAX_LINE_WIDTH")  # Default: "None"
+    max_line_count = os.getenv("MAX_LINE_COUNT")  # Default: "None"
+    highlight_words = str_to_bool(os.getenv("HIGHLIGHT_WORDS", "false"))  # Default: False
+    segment_resolution = os.getenv("SEGMENT_RESOLUTION")  # Default: "sentence"
 
     command = ["whisperx", audio_file_path]
 
     # Add optional parameters to the command if they are provided
     if model:
         command.extend(["--model", model])
+    if initial_prompt:
+        command.extend(["--initial_prompt", initial_prompt])
     if output_dir:
         command.extend(["--output_dir", output_dir])
     if output_format:
@@ -63,18 +108,72 @@ async def run_whisperx(
         command.extend(["--task", task])
     if language:
         command.extend(["--language", language])
-    if batch_size:
-        command.extend(["--batch_size", str(batch_size)])
+    if no_align:
+        command.append("--no_align")
+    if diarize:
+        command.append("--diarize")
+    if min_speakers is not None:
+        command.extend(["--min_speakers", str(min_speakers)])
+    if max_speakers is not None:
+        command.extend(["--max_speakers", str(max_speakers)])
+    if hf_token:
+        command.extend(["--hf_token", hf_token])
     if device:
         command.extend(["--device", device])
     if device_index:
         command.extend(["--device_index", device_index])
+    if batch_size:
+        command.extend(["--batch_size", batch_size])
     if compute_type:
         command.extend(["--compute_type", compute_type])
     if threads:
         command.extend(["--threads", threads])
-    if hf_token:
-        command.extend(["--hf_token", hf_token])
+    if align_model:
+        command.extend(["--align_model", align_model])
+    if interpolate_method:
+        command.extend(["--interpolate_method", interpolate_method])
+    if return_char_alignments:
+        command.append("--return_char_alignments")
+    if vad_onset:
+        command.extend(["--vad_onset", vad_onset])
+    if vad_offset:
+        command.extend(["--vad_offset", vad_offset])
+    if chunk_size:
+        command.extend(["--chunk_size", chunk_size])
+    if temperature:
+        command.extend(["--temperature", temperature])
+    if best_of:
+        command.extend(["--best_of", best_of])
+    if beam_size:
+        command.extend(["--beam_size", beam_size])
+    if patience:
+        command.extend(["--patience", patience])
+    if length_penalty:
+        command.extend(["--length_penalty", length_penalty])
+    if suppress_tokens:
+        command.extend(["--suppress_tokens", suppress_tokens])
+    if suppress_numerals:
+        command.append("--suppress_numerals")
+    if condition_on_previous_text:
+        command.append("--condition_on_previous_text")
+    if fp16:
+        command.append("--fp16")
+    if temperature_increment_on_fallback:
+        command.extend(["--temperature_increment_on_fallback", temperature_increment_on_fallback])
+    if compression_ratio_threshold:
+        command.extend(["--compression_ratio_threshold", compression_ratio_threshold])
+    if logprob_threshold:
+        command.extend(["--logprob_threshold", logprob_threshold])
+    if no_speech_threshold:
+        command.extend(["--no_speech_threshold", no_speech_threshold])
+    if max_line_width:
+        command.extend(["--max_line_width", max_line_width])
+    if max_line_count:
+        command.extend(["--max_line_count", max_line_count])
+    if highlight_words:
+        command.append("--highlight_words")
+    if segment_resolution:
+        command.extend(["--segment_resolution", segment_resolution])
     if print_progress:
         command.append("--print_progress")
 
