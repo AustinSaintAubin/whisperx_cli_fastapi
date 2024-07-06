@@ -64,6 +64,8 @@ async def run_whisperx(
 
     # Retrieve environment variables, default values are provided in comments
     output_dir = os.getenv("OUTPUT_DIR", "/tmp/output")  # Default: "/tmp/output"
+    model_dir = os.getenv("MODEL_DIR", "/models")  # Default: "/models"
+
     device = os.getenv("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")  # Default: "cuda"
     device_index = os.getenv("DEVICE_INDEX")  # Default: "0"
     batch_size = os.getenv("BATCH_SIZE", "6")  # Default: "6"
@@ -94,16 +96,14 @@ async def run_whisperx(
     highlight_words = str_to_bool(os.getenv("HIGHLIGHT_WORDS", "false"))  # Default: False
     segment_resolution = os.getenv("SEGMENT_RESOLUTION")  # Default: "sentence"
 
-    command = ["whisperx", audio_file_path, "--model_dir", "/models"]
     # command = ["whisperx", audio_file_path]
+    command = ["whisperx", audio_file_path, "--output_dir", output_dir, "--model_dir", model_dir]
 
     # Add optional parameters to the command if they are provided
     if model:
         command.extend(["--model", model])
     if initial_prompt:
         command.extend(["--initial_prompt", initial_prompt])
-    if output_dir:
-        command.extend(["--output_dir", output_dir])
     if output_format:
         command.extend(["--output_format", output_format])
     if task:
@@ -184,9 +184,12 @@ async def run_whisperx(
     # Execute the WhisperX command and log the output
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-    # Log the output to the terminal
+    # Log the output and error to the terminal
     for stdout_line in iter(process.stdout.readline, ""):
         logger.info(stdout_line.strip())
+
+    for stderr_line in iter(process.stderr.readline, ""):
+        logger.error(stderr_line.strip())
 
     process.stdout.close()
     process.wait()
