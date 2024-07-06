@@ -2,6 +2,8 @@ version: "3.8"
 
 services:
   whisperx-api:
+    container_name: whisperx-cli-fastapi
+    # restart: always
     build: .
     ports:
       - "8000:8000"
@@ -9,10 +11,25 @@ services:
       resources:
         reservations:
           devices:
-            - capabilities: [gpu]
+            - driver: nvidia
+              # device_ids: ['GPU-0691586d-7d90-f2a9-a8b3-1ccc83f5525e'] # NVIDIA GeForce RTX 3060
+              device_ids: ['GPU-c60d7eb7-e0e2-f883-2d7b-cbefe938339b'] # NVIDIA GeForce RTX 4090
+              # device_ids: ['1'] # ['0', '1']
+              # count: 1
+              capabilities: [gpu]
+              # capabilities: [compute, utility]
+    # # Set hardware limits: one GPU, max. 48GB RAM, max. 31 GPUs
+    #     limits:
+    #       cpus: "31.0"
+    #       memory: 48g
+    mem_limit: 64G      # Mem Limiting
+    cpuset: "0-7,16-23" # CPU Pinning
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      - PYTHONUNBUFFERED=1
+      - MODEL=large-v3
+      - HF_TOKEN=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
+    volumes:
+      - ./data/models:/models
+      - ./data/cache/torch:/root/.cache/torch/
+      - ./data/cache/huggingface:/root/.cache/huggingface/
     runtime: nvidia
       

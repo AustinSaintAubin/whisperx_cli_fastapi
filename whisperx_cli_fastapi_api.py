@@ -33,6 +33,9 @@ def str_to_bool(value):
 
 # Manually define available models, language choices, and other options
 MODEL_CHOICES = ["tiny", "base", "small", "medium", "large", "large-v1", "large-v2", "large-v3"]
+OUTPUT_FORMAT_CHOICES = ["all", "srt", "vtt", "txt", "tsv", "json", "aud", "diarized.tsv"]
+COMPUTE_TYPE_CHOICES = ["float16", "float32", "int8"]
+TASK_CHOICES = ["transcribe", "translate"]
 LANGUAGES = {
     "af": "Afrikaans", "am": "Amharic", "ar": "Arabic", "as": "Assamese", "az": "Azerbaijani",
     "ba": "Bashkir", "be": "Belarusian", "bg": "Bulgarian", "bn": "Bengali", "bo": "Tibetan",
@@ -53,78 +56,78 @@ LANGUAGES = {
     "vi": "Vietnamese", "yi": "Yiddish", "yo": "Yoruba", "yue": "Cantonese", "zh": "Chinese"
 }
 LANGUAGE_CODES = sorted(LANGUAGES.keys()) + sorted([k.title() for k in LANGUAGES.values()])
-COMPUTE_TYPE_CHOICES = ["float16", "float32", "int8"]
-OUTPUT_FORMAT_CHOICES = ["all", "srt", "vtt", "txt", "tsv", "json", "aud", "dir"]
-TASK_CHOICES = ["transcribe", "translate"]
+
+# Retrieve environment variables, default values are provided in comments
+initial_prompt = os.getenv("INITIAL_PROMPT")
+model = os.getenv("MODEL", "base")
+task = os.getenv("TASK", "transcribe")
+output_format = os.getenv("OUTPUT_FORMAT", "diarized.tsv")  # Default: txt
+language = os.getenv("LANGUAGE")
+diarize = os.getenv("DIARIZE")
+min_speakers = os.getenv("MIN_SPEAKERS")
+max_speakers = os.getenv("MAX_SPEAKERS")
+hf_token = os.getenv("HF_TOKEN")  # Needed for diarization
+no_align = os.getenv("NO_ALIGN", False)
+
+output_dir = os.getenv("OUTPUT_DIR", "/tmp/output")  # Default: "/tmp/output"
+model_dir = os.getenv("MODEL_DIR", "/models")  # Default: "/models"
+compute_type = os.getenv("COMPUTE_TYPE", "float16" if torch.cuda.is_available() else "int8")  # Default: "float32"
+device = os.getenv("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")  # Default: "cuda"
+device_index = os.getenv("DEVICE_INDEX")  # Default: "0"
+print_progress = str_to_bool(os.getenv("PRINT_PROGRESS", "false"))  # Default: False
+batch_size = os.getenv("BATCH_SIZE")  # Default: "6"
+threads = os.getenv("THREADS")  # Default: "4"
+align_model = os.getenv("ALIGN_MODEL")  # Default: ""
+interpolate_method = os.getenv("INTERPOLATE_METHOD")  # Default: "nearest"
+return_char_alignments = str_to_bool(os.getenv("RETURN_CHAR_ALIGNMENTS", "false"))  # Default: False
+vad_onset = os.getenv("VAD_ONSET")  # Default: "0.5"
+vad_offset = os.getenv("VAD_OFFSET")  # Default: "0.363"
+chunk_size = os.getenv("CHUNK_SIZE")  # Default: "30"
+temperature = os.getenv("TEMPERATURE")  # Default: "0"
+best_of = os.getenv("BEST_OF")  # Default: "5"
+beam_size = os.getenv("BEAM_SIZE")  # Default: "5"
+patience = os.getenv("PATIENCE")  # Default: "1.0"
+length_penalty = os.getenv("LENGTH_PENALTY")  # Default: "1.0"
+suppress_tokens = os.getenv("SUPPRESS_TOKENS")  # Default: "-1"
+suppress_numerals = str_to_bool(os.getenv("SUPPRESS_NUMERALS", "false"))  # Default: False
+condition_on_previous_text = str_to_bool(os.getenv("CONDITION_ON_PREVIOUS_TEXT", "false"))  # Default: False
+fp16 = str_to_bool(os.getenv("FP16", "false"))  # Default: Flase
+temperature_increment_on_fallback = os.getenv("TEMPERATURE_INCREMENT_ON_FALLBACK")  # Default: "0.2"
+compression_ratio_threshold = os.getenv("COMPRESSION_RATIO_THRESHOLD")  # Default: "2.4"
+logprob_threshold = os.getenv("LOGPROB_THRESHOLD")  # Default: "-1.0"
+no_speech_threshold = os.getenv("NO_SPEECH_THRESHOLD")  # Default: "0.6"
+max_line_width = os.getenv("MAX_LINE_WIDTH")  # Default: "None"
+max_line_count = os.getenv("MAX_LINE_COUNT")  # Default: "None"
+highlight_words = str_to_bool(os.getenv("HIGHLIGHT_WORDS", "false"))  # Default: False
+segment_resolution = os.getenv("SEGMENT_RESOLUTION")  # Default: "sentence"
+
+# Output the value of HF_TOKEN
+print(f'HF_TOKEN: {hf_token}')
 
 @app.get("/", response_class=RedirectResponse, include_in_schema=False)
 async def index():
     return "/docs"
 
-# @app.post("/asr/")
-# async def run_whisperx(
-#     audio_file: UploadFile = File(...),
-#     task: Union[str, None] = Query(default="transcribe", enum=TASK_CHOICES),
-#     language: Union[str, None] = Query(default=None, enum=LANGUAGE_CODES),
-#     initial_prompt: Union[str, None] = Query(default=None),
-#     output: Union[str, None] = Query(default="txt", enum=OUTPUT_FORMAT_CHOICES),
-#     output_format = output
-# ):
-
-@app.post("/whisperx/")
+@app.post("/asr")
+@app.post("/whisperx")
 async def run_whisperx(
     audio_file: UploadFile = File(...),
-    model: Union[str, None] = Query(default="base", enum=MODEL_CHOICES),
-    initial_prompt: Union[str, None] = Query(default=None),
-    output_format: Union[str, None] = Query(default="txt", enum=OUTPUT_FORMAT_CHOICES),
-    task: Union[str, None] = Query(default="transcribe", enum=TASK_CHOICES),
-    language: Union[str, None] = Query(default=None, enum=LANGUAGE_CODES),
-    no_align: bool = Query(default=False),
-    diarize: bool = Query(default=False),
-    min_speakers: Union[str, None] = Query(default=None),
-    max_speakers: Union[str, None] = Query(default=None),
-    # hf_token: Union[str, None] = Query(default=None)
-    hf_token: Union[str, None] = Query(default="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")
+    initial_prompt: Union[str, None] = Query(default=initial_prompt),
+    model: Union[str, None] = Query(default=model, enum=MODEL_CHOICES),
+    task: Union[str, None] = Query(default=task, enum=TASK_CHOICES),
+    output_format: Union[str, None] = Query(default=output_format, enum=OUTPUT_FORMAT_CHOICES),
+    language: Union[str, None] = Query(default=language, enum=LANGUAGE_CODES),
+    diarize: bool = Query(default=diarize),
+    min_speakers: Union[str, None] = Query(default=min_speakers),
+    max_speakers: Union[str, None] = Query(default=max_speakers),
+    hf_token: Union[str, None] = Query(default=hf_token),
+    no_align: bool = Query(default=no_align)
 ):
+
     # Download the audio file to a temporary directory
     audio_file_path = f"/tmp/{audio_file.filename}"
     with open(audio_file_path, "wb") as buffer:
         buffer.write(await audio_file.read())
-
-    # Retrieve environment variables, default values are provided in comments
-    output_dir = os.getenv("OUTPUT_DIR", "/tmp/output")  # Default: "/tmp/output"
-    model_dir = os.getenv("MODEL_DIR", "/models")  # Default: "/models"
-    
-    compute_type = os.getenv("COMPUTE_TYPE", "float16" if torch.cuda.is_available() else "int8")  # Default: "float32"
-    device = os.getenv("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")  # Default: "cuda"
-
-    device_index = os.getenv("DEVICE_INDEX")  # Default: "0"
-    print_progress = str_to_bool(os.getenv("PRINT_PROGRESS", "false"))  # Default: False
-    batch_size = os.getenv("BATCH_SIZE")  # Default: "6"
-    threads = os.getenv("THREADS")  # Default: "4"
-    align_model = os.getenv("ALIGN_MODEL")  # Default: ""
-    interpolate_method = os.getenv("INTERPOLATE_METHOD")  # Default: "nearest"
-    return_char_alignments = str_to_bool(os.getenv("RETURN_CHAR_ALIGNMENTS", "false"))  # Default: False
-    vad_onset = os.getenv("VAD_ONSET")  # Default: "0.5"
-    vad_offset = os.getenv("VAD_OFFSET")  # Default: "0.363"
-    chunk_size = os.getenv("CHUNK_SIZE")  # Default: "30"
-    temperature = os.getenv("TEMPERATURE")  # Default: "0"
-    best_of = os.getenv("BEST_OF")  # Default: "5"
-    beam_size = os.getenv("BEAM_SIZE")  # Default: "5"
-    patience = os.getenv("PATIENCE")  # Default: "1.0"
-    length_penalty = os.getenv("LENGTH_PENALTY")  # Default: "1.0"
-    suppress_tokens = os.getenv("SUPPRESS_TOKENS")  # Default: "-1"
-    suppress_numerals = str_to_bool(os.getenv("SUPPRESS_NUMERALS", "false"))  # Default: False
-    condition_on_previous_text = str_to_bool(os.getenv("CONDITION_ON_PREVIOUS_TEXT", "false"))  # Default: False
-    fp16 = str_to_bool(os.getenv("FP16", "false"))  # Default: Flase
-    temperature_increment_on_fallback = os.getenv("TEMPERATURE_INCREMENT_ON_FALLBACK")  # Default: "0.2"
-    compression_ratio_threshold = os.getenv("COMPRESSION_RATIO_THRESHOLD")  # Default: "2.4"
-    logprob_threshold = os.getenv("LOGPROB_THRESHOLD")  # Default: "-1.0"
-    no_speech_threshold = os.getenv("NO_SPEECH_THRESHOLD")  # Default: "0.6"
-    max_line_width = os.getenv("MAX_LINE_WIDTH")  # Default: "None"
-    max_line_count = os.getenv("MAX_LINE_COUNT")  # Default: "None"
-    highlight_words = str_to_bool(os.getenv("HIGHLIGHT_WORDS", "false"))  # Default: False
-    segment_resolution = os.getenv("SEGMENT_RESOLUTION")  # Default: "sentence"
 
     # command = ["whisperx", audio_file_path]
     command = ["whisperx", audio_file_path, "--output_dir", output_dir, "--model_dir", model_dir]
@@ -142,7 +145,7 @@ async def run_whisperx(
         command.extend(["--language", language])
     if no_align:
         command.append("--no_align")
-    if diarize:
+    if diarize or output_format == "diarized.tsv":
         command.append("--diarize")
     if min_speakers is not None:
         command.extend(["--min_speakers", str(min_speakers)])
@@ -210,7 +213,7 @@ async def run_whisperx(
         command.extend(["--print_progress", "True"])
 
     logger.info(f"Running command: {' '.join(command)}")
-    logger.info(f"NOTE: If command seems to hand, models are likely being downloaded. Please wait.")
+    logger.info(f"NOTE: If command seems to hang, models are likely being downloaded. Please wait...")
 
     # Execute the WhisperX command and log the output
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
