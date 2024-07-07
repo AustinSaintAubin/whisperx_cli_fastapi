@@ -101,9 +101,6 @@ max_line_count = os.getenv("MAX_LINE_COUNT")  # Default: "None"
 highlight_words = str_to_bool(os.getenv("HIGHLIGHT_WORDS", "false"))  # Default: False
 segment_resolution = os.getenv("SEGMENT_RESOLUTION")  # Default: "sentence"
 
-# Output the value of HF_TOKEN
-print(f'HF_TOKEN: {hf_token}')
-
 @app.get("/", response_class=RedirectResponse, include_in_schema=False)
 async def index():
     return "/docs"
