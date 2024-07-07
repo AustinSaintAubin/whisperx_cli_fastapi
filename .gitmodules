@@ -1,0 +1,3 @@
+[submodule "repositories/WhisperX"]
+	path = repositories/WhisperX
+	url = git@github.com:AustinSaintAubin/WhisperX.git

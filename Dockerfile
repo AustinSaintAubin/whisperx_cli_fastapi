@@ -31,7 +31,7 @@ WORKDIR /app
 
 # Install WisperX
 # RUN pip3 install git+https://github.com/m-bain/whisperx.git
-COPY ./repositories/whisperx ./whisperx
+COPY ./repositories/WhisperX ./whisperx
 RUN pip install --no-input --editable ./whisperx
 
 # Install Python dependencies
