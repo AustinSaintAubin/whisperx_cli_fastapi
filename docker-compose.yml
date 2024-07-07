@@ -15,18 +15,20 @@ services:
               # device_ids: ['GPU-0691586d-7d90-f2a9-a8b3-1ccc83f5525e'] # NVIDIA GeForce RTX 3060
               device_ids: ['GPU-c60d7eb7-e0e2-f883-2d7b-cbefe938339b'] # NVIDIA GeForce RTX 4090
               # device_ids: ['1'] # ['0', '1']
-              # count: 1
+              count: 1
               capabilities: [gpu]
               # capabilities: [compute, utility]
     # # Set hardware limits: one GPU, max. 48GB RAM, max. 31 GPUs
     #     limits:
     #       cpus: "31.0"
     #       memory: 48g
-    mem_limit: 64G      # Mem Limiting
+    mem_limit: 16G      # Mem Limiting
     cpuset: "0-7,16-23" # CPU Pinning
-    environment:
-      - MODEL=large-v3
-      - HF_TOKEN=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
+    env_file:
+      - .env
+    # environment:
+    #   - MODEL=large-v3
+    #   - HF_TOKEN=hf_YOUR-HUGGINGFACE-TOKEN
     volumes:
       - ./data/models:/models
       - ./data/cache/torch:/root/.cache/torch/
