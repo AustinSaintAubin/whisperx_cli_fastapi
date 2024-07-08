@@ -52,6 +52,9 @@ curl -X POST "http://localhost:8000/transcribe" -H  "accept: application/json" -
 ```
 Replace `path/to/your/audio.wav` with the path to your audio file.
 
+### How to enable Speaker Diarization
+- Follow the steps listed on [m-bain/whisperX:speaker-diarization](https://github.com/m-bain/whisperX?tab=readme-ov-file#speaker-diarization)
+
 ## Contributing
 
 Contributions are welcome! If you'd like to contribute to this project, please fork the repository and submit a pull request with your changes.
