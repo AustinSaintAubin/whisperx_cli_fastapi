@@ -13,17 +13,17 @@ services:
           devices:
             - driver: nvidia
               # device_ids: ['GPU-0691586d-7d90-f2a9-a8b3-1ccc83f5525e'] # NVIDIA GeForce RTX 3060
-              device_ids: ['GPU-c60d7eb7-e0e2-f883-2d7b-cbefe938339b'] # NVIDIA GeForce RTX 4090
+              # device_ids: ['GPU-c60d7eb7-e0e2-f883-2d7b-cbefe938339b'] # NVIDIA GeForce RTX 4090
               # device_ids: ['1'] # ['0', '1']
               count: 1
               capabilities: [gpu]
               # capabilities: [compute, utility]
-    # # Set hardware limits: one GPU, max. 48GB RAM, max. 31 GPUs
+    # # Set hardware limits: one GPU, max. 48GB RAM, max. 31 CPUs
     #     limits:
-    #       cpus: "31.0"
-    #       memory: 48g
-    mem_limit: 16G      # Mem Limiting
-    cpuset: "0-7,16-23" # CPU Pinning
+    #       cpus: "16.0"  # Corresponding to 16 CPU cores in cpuset
+    #       memory: 16G   # Set to match mem_limit
+    # mem_limit: 16G      # Memory limiting directly on the container
+    cpuset: "0-7,16-23" # CPU Pinning (16 cores total)
     env_file:
       - .env
     # environment:
@@ -34,4 +34,3 @@ services:
       - ./data/cache/torch:/root/.cache/torch/
       - ./data/cache/huggingface:/root/.cache/huggingface/
     runtime: nvidia
-      

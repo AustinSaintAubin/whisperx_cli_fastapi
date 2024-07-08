@@ -12,8 +12,6 @@ from typing import Union
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="WhisperX CLI ASR Webservice")
-
 app = FastAPI(
     title="WhisperX CLI ASR Webservice",
     description="A webservice for WhisperX CLI",
